@@ -1,4 +1,0 @@
-# .claspignore
-**/**
-!src/**
-!appsscript.json
