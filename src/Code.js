@@ -3,7 +3,7 @@
  * 
  * ObsidianのMarkdownファイルをGoogleドキュメントに同期し、NotebookLMでの利用を支援するスクリプト。
  * 
- * @author AI Assistant
+ * @author 後藤 柳次郎
  * @version 1.0.0
  */
 
@@ -31,6 +31,8 @@ function onOpen() {
       .addItem('⚙️ 初回セットアップ', 'setupSystem')
       .addItem('📂 リスト更新 (設定維持)', 'scanTargetFolder')
       .addItem('🔄 同期実行 (差分のみ)', 'syncFiles')
+      .addSeparator()
+      .addItem('🔧 ファイル名修正 (リカバリ)', 'fixFilenames')
       .addToUi();
   } catch (e) {
     console.warn('onOpen: UI操作はコンテナバインドスクリプト、またはスプレッドシートが開かれている状態でのみ有効です。', e);
@@ -46,7 +48,7 @@ function onOpen() {
  */
 function setupSystem() {
   console.log('セットアップを開始します...');
-  
+
   try {
     // 1. スプレッドシート作成
     const ssName = 'NotebookLM_Sync_DB';
@@ -79,7 +81,7 @@ function setupSystem() {
     const consoleHeader = ['Sync?', 'Project', 'File_Name', 'Folder_Path', 'MD_ID', 'Doc_ID', 'Last_Updated_MD', 'Last_Sync_Time', 'Status'];
     consoleSheet.getRange(1, 1, 1, consoleHeader.length).setValues([consoleHeader]);
     consoleSheet.setFrozenRows(1);
-    
+
     // チェックボックスの入力規則を設定 (Sync?列)
     const rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
     consoleSheet.getRange('A2:A1000').setDataValidation(rule); // 一旦1000行まで
@@ -91,7 +93,7 @@ function setupSystem() {
     // 4. ID保存
     PropertiesService.getScriptProperties().setProperty(PROP_KEY_SS_ID, ssId);
     console.log(`スクリプトプロパティにIDを保存しました: ${ssId}`);
-    
+
     console.log('セットアップ完了。');
 
   } catch (e) {
@@ -110,7 +112,7 @@ function scanTargetFolder() {
 
   const settingsSheet = ss.getSheetByName('Settings');
   const consoleSheet = ss.getSheetByName('Console');
-  
+
   // 設定読み込み
   const settingsData = settingsSheet.getDataRange().getValues();
   settingsData.shift(); // ヘッダー削除
@@ -118,7 +120,7 @@ function scanTargetFolder() {
   // 既存データ読み込み (状態維持のため)
   const consoleData = consoleSheet.getDataRange().getValues();
   const consoleHeader = consoleData.shift(); // ヘッダー削除
-  
+
   // MD_IDをキーにしたマップを作成
   const existingFilesMap = new Map();
   consoleData.forEach(row => {
@@ -134,7 +136,7 @@ function scanTargetFolder() {
   });
 
   let newConsoleData = [];
-  
+
   console.log('スキャンを開始します...');
 
   settingsData.forEach(setting => {
@@ -144,7 +146,7 @@ function scanTargetFolder() {
     try {
       const sourceFolderId = getIdFromUrl_(sourceUrl);
       const sourceFolder = DriveApp.getFolderById(sourceFolderId);
-      
+
       const files = [];
       processFolder_(sourceFolder, files, recursive, "");
 
@@ -152,7 +154,7 @@ function scanTargetFolder() {
         const mdId = file.getId();
         const fileName = file.getName();
         const lastUpdated = file.getLastUpdated();
-        
+
         let sync = false;
         let docId = '';
         let lastSyncTime = '';
@@ -204,7 +206,7 @@ function scanTargetFolder() {
     }
     consoleSheet.getRange(2, 1, newConsoleData.length, newConsoleData[0].length).setValues(newConsoleData);
   }
-  
+
   console.log('スキャン完了。');
 }
 
@@ -218,7 +220,7 @@ function syncFiles() {
 
   const settingsSheet = ss.getSheetByName('Settings');
   const consoleSheet = ss.getSheetByName('Console');
-  
+
   // SettingsからTarget Folder URLを取得するためのマップ
   const settingsData = settingsSheet.getDataRange().getValues();
   settingsData.shift();
@@ -230,7 +232,7 @@ function syncFiles() {
   const dataRange = consoleSheet.getDataRange();
   const data = dataRange.getValues();
   const header = data.shift(); // ヘッダー
-  
+
   // 列インデックス
   const IDX_SYNC = 0;
   const IDX_PROJECT = 1;
@@ -250,13 +252,13 @@ function syncFiles() {
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
     const sync = row[IDX_SYNC];
-    
+
     if (!sync) continue; // 同期対象外
 
     const mdId = row[IDX_MD_ID];
     const lastUpdated = new Date(row[IDX_LAST_UPDATED]);
     const lastSync = row[IDX_LAST_SYNC] ? new Date(row[IDX_LAST_SYNC]) : new Date(0);
-    
+
     // 更新判定: MD更新日時 > 最終同期日時
     if (lastUpdated <= lastSync) {
       // 既に同期済み
@@ -268,7 +270,7 @@ function syncFiles() {
       const mdContent = mdFile.getBlob().getDataAsString();
       const project = row[IDX_PROJECT];
       const targetUrl = projectTargetMap.get(project);
-      
+
       if (!targetUrl) {
         row[IDX_STATUS] = 'Error: No Target URL';
         continue;
@@ -276,7 +278,7 @@ function syncFiles() {
 
       const targetFolderId = getIdFromUrl_(targetUrl);
       const targetFolder = DriveApp.getFolderById(targetFolderId);
-      
+
       let docId = row[IDX_DOC_ID];
       let doc;
 
@@ -285,8 +287,9 @@ function syncFiles() {
         try {
           doc = DocumentApp.openById(docId);
           // リネームチェック
-          if (doc.getName() !== row[IDX_FILENAME]) {
-            doc.setName(row[IDX_FILENAME]);
+          const docName = row[IDX_FILENAME].replace(/\.md$/i, '');
+          if (doc.getName() !== docName) {
+            doc.setName(docName);
           }
         } catch (e) {
           // 開けない場合は新規作成扱い
@@ -297,7 +300,8 @@ function syncFiles() {
 
       if (!doc) {
         // 新規作成
-        doc = DocumentApp.create(row[IDX_FILENAME]);
+        const docName = row[IDX_FILENAME].replace(/\.md$/i, '');
+        doc = DocumentApp.create(docName);
         const docFile = DriveApp.getFileById(doc.getId());
         docFile.moveTo(targetFolder); // 指定フォルダへ移動
         docId = doc.getId();
@@ -320,7 +324,7 @@ function syncFiles() {
       console.error(`同期エラー (${row[IDX_FILENAME]}):`, e);
       row[IDX_STATUS] = `Error: ${e.message}`;
     }
-    
+
     // 配列に行を戻す
     data[i] = row;
   }
@@ -331,6 +335,50 @@ function syncFiles() {
   }
 
   console.log(`同期処理終了。更新数: ${updatedCount}`);
+}
+
+/**
+ * 既存のGoogleドキュメントの名前から拡張子(.md)を除去するリカバリ用関数
+ * 既に同期済みのファイルに対しても名前の修正を適用します。
+ */
+function fixFilenames() {
+  const ss = getSpreadsheet_();
+  if (!ss) return;
+
+  const consoleSheet = ss.getSheetByName('Console');
+  const dataRange = consoleSheet.getDataRange();
+  const data = dataRange.getValues();
+  data.shift(); // ヘッダー削除
+
+  // 列インデックス (syncFilesと同じ)
+  const IDX_FILENAME = 2;
+  const IDX_DOC_ID = 5;
+
+  let fixedCount = 0;
+  console.log('ファイル名修正処理を開始します...');
+
+  data.forEach(row => {
+    const fileName = row[IDX_FILENAME];
+    const docId = row[IDX_DOC_ID];
+
+    if (docId) {
+      try {
+        const doc = DocumentApp.openById(docId);
+        const currentDocName = doc.getName();
+        const correctName = fileName.replace(/\.md$/i, '');
+
+        if (currentDocName !== correctName) {
+          doc.setName(correctName);
+          console.log(`修正しました: "${currentDocName}" -> "${correctName}"`);
+          fixedCount++;
+        }
+      } catch (e) {
+        console.warn(`ドキュメントへのアクセスエラー (${fileName}):`, e.message);
+      }
+    }
+  });
+
+  console.log(`ファイル名修正完了。修正数: ${fixedCount}`);
 }
 
 // --- Helper Functions ---
@@ -376,7 +424,7 @@ function processFolder_(folder, filesList, recursive, pathPrefix) {
   // DriveAppではMimeTypeで完全に絞りきれない場合があるため、全ファイル取得して拡張子フィルタの方が確実な場合もあるが、
   // ここでは効率のため一旦PLAIN_TEXT等で取得しつつ、拡張子を確認する。
   // ※MarkdownのMimeTypeは環境により異なる場合がある。
-  
+
   // 念のため全ファイルイテレータから拡張子でフィルタリングする方式を採用（確実性重視）
   const allFiles = folder.getFiles();
   while (allFiles.hasNext()) {

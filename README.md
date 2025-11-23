@@ -25,6 +25,7 @@ NotebookLMは強力なAIリサーチアシスタントですが、Googleドキ�
 -   **状態維持 (State Preservation)**: フォルダを再スキャンしても、同期設定（`Sync?` フラグ）を維持します。
 -   **自動セットアップ**: ワンクリック初期化（`setupSystem`）により、必要なデータベースとフォルダ構成を自動的に作成します。
 -   **再帰スキャン**: Obsidianボルトの深いフォルダ構造もそのまま反映してスキャンします。
+-   **クリーンなファイル名**: Googleドキュメント作成時に拡張子 (`.md`) を自動的に除去し、視認性を向上させます。
 
 ## 🏗️ アーキテクチャ (Architecture)
 
@@ -112,7 +113,13 @@ graph TD
 スクリプトエディタから：
 -   **`syncFiles`** を実行します。
 -   `Last_Updated_MD` > `Last_Sync_Time` （更新あり）かつチェックが入っているファイルのみ処理されます。
+-   `Last_Updated_MD` > `Last_Sync_Time` （更新あり）かつチェックが入っているファイルのみ処理されます。
 -   **Status** 列で結果を確認できます（`Synced`, `Skipped`, `Error`）。
+
+### 5. ファイル名修正 (Fix Filenames)
+既に同期済みのファイル名に `.md` が残っている場合：
+-   スクリプトエディタまたはメニューから **`fixFilenames`** を実行します。
+-   Googleドキュメントの名前から拡張子を除去してリネームします。
 
 ## 📄 ライセンス (License)
 
@@ -120,4 +127,4 @@ graph TD
 
 ## 👤 作者 (Author)
 
-**AI Assistant** (on behalf of User)
+**後藤 柳次郎**
